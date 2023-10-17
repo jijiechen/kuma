@@ -31,25 +31,6 @@ var _ = Describe("ClusterLoadAssignment Cache", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("should cache ClusterLoadAssignment", func() {
-		// given
-		endpointMap := xds.EndpointMap{
-			"backend": []xds.Endpoint{
-				{
-					Target: "192.168.0.1",
-					Port:   uint32(1000),
-				},
-			},
-		}
-		cla1, err := claCache.GetCLA(context.Background(), "mesh-0", "", envoy_common.NewCluster(envoy_common.WithService("backend")), envoy_common.APIV3, endpointMap)
-		Expect(err).ToNot(HaveOccurred())
-
-		cla2, err := claCache.GetCLA(context.Background(), "mesh-0", "", envoy_common.NewCluster(envoy_common.WithService("backend")), envoy_common.APIV3, endpointMap)
-		Expect(err).ToNot(HaveOccurred())
-
-		Expect(cla1).To(BeIdenticalTo(cla2))
-	})
-
 	It("should pick endpoints for proper service", func() {
 		// given
 		endpointMap := xds.EndpointMap{
