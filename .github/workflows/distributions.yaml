@@ -1,0 +1,224 @@
+on:
+  push:
+    branches: ["commit-workflow"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # todo: amd64/arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: "Install basic tools"
+        run:
+          # `unzip`    is necessary to install `protoc`
+          # `gcc`      is necessary to run `go test -race`
+          # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
+          # `xz-utils` is necessary to decompress xz files
+          name: "Install basic tools"
+          command: |
+            if [ -r /etc/os-release ]; then source /etc/os-release; fi
+            case "$ID" in
+            ubuntu)
+              if ! command -v sudo 2>&1 >/dev/null; then
+                apt update
+                apt install -y sudo
+              fi
+
+              sudo apt update
+              sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
+              ;;
+            esac
+
+      # GitHub actions does not share cache across multiple jobs,
+      # so we have to operate cache in each job and action file
+      - id: retrieve-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.kuma-dev
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - if: steps.retrieve-cache.outputs.cache-hit != 'true'
+        run: |
+          make dev/tools
+      - if: steps.retrieve-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.kuma-dev
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+      - run: |
+          make clean
+      - run: |
+          make check
+      - run: |
+          make build
+      - run: |
+          make -j build/distributions
+      - run: |
+          make -j images
+      - run: |
+          make -j docker/save
+
+      - name: temporarily saving build output
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-output
+          path: build
+          retention-days: 1
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - name: "Install basic tools"
+        run:
+          # `unzip`    is necessary to install `protoc`
+          # `gcc`      is necessary to run `go test -race`
+          # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
+          # `xz-utils` is necessary to decompress xz files
+          name: "Install basic tools"
+          command: |
+            if [ -r /etc/os-release ]; then source /etc/os-release; fi
+            case "$ID" in
+            ubuntu)
+              if ! command -v sudo 2>&1 >/dev/null; then
+                apt update
+                apt install -y sudo
+              fi
+
+              sudo apt update
+              sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
+              ;;
+            esac
+      - uses: actions/cache/restore@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.kuma-dev
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+        fail-on-cache-miss: true
+
+        # todo: support skip test
+#      - when:
+#          condition: {equal: [arm64, << parameters.arch >>]}
+#          steps:
+#            - halt_non_priority_job
+#      - halt_job_if_labeled:
+#          label: "ci/skip-test"
+      - name: run tests
+        run: |
+            make test TEST_REPORTS=1
+      - name: save test reports
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-reports
+          path: build/reports
+          retention-days: 30
+
+      - name: cleanup build folder
+        run: |
+            rm -rf ./build
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: build-output
+
+#      - halt_job_if_labeled:
+#          label: "ci/skip-container-structure-test"
+#      - halt_job_if_labeled:
+#          label: "ci/skip-test"
+#      - setenv_depending_on_priority:
+#          label: "ci/run-full-matrix"
+#          env: ENABLED_GOARCHES="arm64 amd64"
+      - run:
+          command: sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
+      - run: |
+          make test/container-structure
+
+
+  distributions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - name: "Install basic tools"
+        run:
+          # `unzip`    is necessary to install `protoc`
+          # `gcc`      is necessary to run `go test -race`
+          # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
+          # `xz-utils` is necessary to decompress xz files
+          name: "Install basic tools"
+          command: |
+            if [ -r /etc/os-release ]; then source /etc/os-release; fi
+            case "$ID" in
+            ubuntu)
+              if ! command -v sudo 2>&1 >/dev/null; then
+                apt update
+                apt install -y sudo
+              fi
+
+              sudo apt update
+              sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
+              ;;
+            esac
+      - uses: actions/cache/restore@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.kuma-dev
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+        fail-on-cache-miss: true
+
+#      - setenv_depending_on_priority:
+#          label: ci/force-publish
+#          env: ALLOW_PUSH=true
+#      - setenv_depending_on_priority:
+#          label: ci/run-full-matrix
+#          env: ENABLED_GOARCHES="arm64 amd64" ENABLED_GOOSES="linux darwin"
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: build-output
+
+      - run:
+          name: inspect created tars
+          command: for i in build/distributions/out/*.tar.gz; do echo $i; tar -tvf $i; done
+      - run:
+          name: Publish distributions to Pulp
+          command: make publish/pulp
+      - run:
+          name: load images
+          command: make docker/load
+      - run:
+          name: publish images
+          command: |
+            make docker/login
+            # ensure we always logout
+            function on_exit() {
+              make docker/logout
+            }
+            trap on_exit EXIT
+            make docker/push
+            make docker/manifest
