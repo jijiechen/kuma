@@ -74,6 +74,7 @@ jobs:
           retention-days: 1
 
   test:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -146,6 +147,7 @@ jobs:
 
 
   distributions:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
