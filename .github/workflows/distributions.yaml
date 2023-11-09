@@ -1,10 +1,9 @@
 on:
   push:
     branches: ["commit-workflow"]
-
 jobs:
   build:
-    runs-on: ubuntu-latest  # todo: amd64/arm64
+    runs-on: ubuntu-latest # todo: amd64/arm64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +27,6 @@ jobs:
             sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
             ;;
           esac
-
       # GitHub actions does not share cache across multiple jobs,
       # so we have to operate cache in each job and action file
       - id: retrieve-cache
@@ -65,14 +63,12 @@ jobs:
           make -j images
       - run: |
           make -j docker/save
-
-      - name: temporarily saving build output
+      - name: Temporarily saving build output
         uses: actions/upload-artifact@v2
         with:
           name: build-output
           path: build
           retention-days: 1
-
   test:
     needs: build
     runs-on: ubuntu-latest
@@ -98,7 +94,6 @@ jobs:
             sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
             ;;
           esac
-
       - uses: actions/cache/restore@v3
         with:
           path: |
@@ -107,45 +102,40 @@ jobs:
             ~/.kuma-dev
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
           fail-on-cache-miss: true
+          # todo: support skip test
+      - name: Run tests
+        #      - when:
+        #          condition: {equal: [arm64, << parameters.arch >>]}
+        #          steps:
+        #            - halt_non_priority_job
+        #      - halt_job_if_labeled:
+        #          label: "ci/skip-test"
 
-        # todo: support skip test
-#      - when:
-#          condition: {equal: [arm64, << parameters.arch >>]}
-#          steps:
-#            - halt_non_priority_job
-#      - halt_job_if_labeled:
-#          label: "ci/skip-test"
-      - name: run tests
         run: |
-            make test TEST_REPORTS=1
-      - name: save test reports
+          make test TEST_REPORTS=1
+      - name: Save test reports
         uses: actions/upload-artifact@v2
         with:
           name: test-reports
           path: build/reports
           retention-days: 30
-
-      - name: cleanup build folder
+      - name: Cleanup build folder
         run: |
-            rm -rf ./build
-
+          rm -rf ./build
       - uses: actions/download-artifact@v2
         with:
           name: build-output
-
-#      - halt_job_if_labeled:
-#          label: "ci/skip-container-structure-test"
-#      - halt_job_if_labeled:
-#          label: "ci/skip-test"
-#      - setenv_depending_on_priority:
-#          label: "ci/run-full-matrix"
-#          env: ENABLED_GOARCHES="arm64 amd64"
+          #      - halt_job_if_labeled:
+          #          label: "ci/skip-container-structure-test"
+          #      - halt_job_if_labeled:
+          #          label: "ci/skip-test"
+          #      - setenv_depending_on_priority:
+          #          label: "ci/run-full-matrix"
+          #          env: ENABLED_GOARCHES="arm64 amd64"
       - run: |
-         sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
+          sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
       - run: |
           make test/container-structure
-
-
   distributions:
     needs: test
     runs-on: ubuntu-latest
@@ -171,7 +161,6 @@ jobs:
             sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
             ;;
           esac
-
       - uses: actions/cache/restore@v3
         with:
           path: |
@@ -180,28 +169,25 @@ jobs:
             ~/.kuma-dev
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
           fail-on-cache-miss: true
-
-#      - setenv_depending_on_priority:
-#          label: ci/force-publish
-#          env: ALLOW_PUSH=true
-#      - setenv_depending_on_priority:
-#          label: ci/run-full-matrix
-#          env: ENABLED_GOARCHES="arm64 amd64" ENABLED_GOOSES="linux darwin"
-
+          #      - setenv_depending_on_priority:
+          #          label: ci/force-publish
+          #          env: ALLOW_PUSH=true
+          #      - setenv_depending_on_priority:
+          #          label: ci/run-full-matrix
+          #          env: ENABLED_GOARCHES="arm64 amd64" ENABLED_GOOSES="linux darwin"
       - uses: actions/download-artifact@v2
         with:
           name: build-output
-
-      - name: inspect created tars
+      - name: Inspect created tars
         run: |
           for i in build/distributions/out/*.tar.gz; do echo $i; tar -tvf $i; done
       - name: Publish distributions to Pulp
         run: |
           make publish/pulp
-      - name: load images
+      - name: Load images
         run: |
           make docker/load
-      - name: publish images
+      - name: Publish images
         run: |
           make docker/login
           # ensure we always logout
