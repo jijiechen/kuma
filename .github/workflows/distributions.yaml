@@ -34,9 +34,8 @@ jobs:
         with:
           path: |
             ~/.cache/go-build
-            ~/go/pkg/mod
             ~/.kuma-dev
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
       - uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
@@ -48,9 +47,8 @@ jobs:
         with:
           path: |
             ~/.cache/go-build
-            ~/go/pkg/mod
             ~/.kuma-dev
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
       - run: |
           make clean
       - run: |
@@ -98,9 +96,8 @@ jobs:
         with:
           path: |
             ~/.cache/go-build
-            ~/go/pkg/mod
             ~/.kuma-dev
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
           fail-on-cache-miss: true
           # todo: support skip test
       - name: Run tests
@@ -165,9 +162,8 @@ jobs:
         with:
           path: |
             ~/.cache/go-build
-            ~/go/pkg/mod
             ~/.kuma-dev
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
           fail-on-cache-miss: true
           #      - setenv_depending_on_priority:
           #          label: ci/force-publish
