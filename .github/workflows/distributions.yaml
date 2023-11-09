@@ -177,7 +177,7 @@ jobs:
             ~/go/pkg/mod
             ~/.kuma-dev
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
-        fail-on-cache-miss: true
+          fail-on-cache-miss: true
 
 #      - setenv_depending_on_priority:
 #          label: ci/force-publish
@@ -190,23 +190,22 @@ jobs:
         with:
           name: build-output
 
-      - run:
-          name: inspect created tars
-          command: for i in build/distributions/out/*.tar.gz; do echo $i; tar -tvf $i; done
-      - run:
-          name: Publish distributions to Pulp
-          command: make publish/pulp
-      - run:
-          name: load images
-          command: make docker/load
-      - run:
-          name: publish images
-          command: |
-            make docker/login
-            # ensure we always logout
-            function on_exit() {
-              make docker/logout
-            }
-            trap on_exit EXIT
-            make docker/push
-            make docker/manifest
+      - name: inspect created tars
+        run: |
+          for i in build/distributions/out/*.tar.gz; do echo $i; tar -tvf $i; done
+      - name: Publish distributions to Pulp
+        run: |
+          make publish/pulp
+      - name: load images
+        run: |
+          make docker/load
+      - name: publish images
+        run: |
+          make docker/login
+          # ensure we always logout
+          function on_exit() {
+            make docker/logout
+          }
+          trap on_exit EXIT
+          make docker/push
+          make docker/manifest
