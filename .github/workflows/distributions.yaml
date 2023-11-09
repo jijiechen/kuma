@@ -105,7 +105,7 @@ jobs:
             ~/go/pkg/mod
             ~/.kuma-dev
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
-        fail-on-cache-miss: true
+          fail-on-cache-miss: true
 
         # todo: support skip test
 #      - when:
@@ -139,8 +139,8 @@ jobs:
 #      - setenv_depending_on_priority:
 #          label: "ci/run-full-matrix"
 #          env: ENABLED_GOARCHES="arm64 amd64"
-      - run:
-          command: sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
+      - run: |
+         sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
       - run: |
           make test/container-structure
 
