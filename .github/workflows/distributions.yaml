@@ -11,25 +11,23 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - name: "Install basic tools"
-        run:
-          # `unzip`    is necessary to install `protoc`
-          # `gcc`      is necessary to run `go test -race`
-          # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
-          # `xz-utils` is necessary to decompress xz files
-          name: "Install basic tools"
-          command: |
-            if [ -r /etc/os-release ]; then source /etc/os-release; fi
-            case "$ID" in
-            ubuntu)
-              if ! command -v sudo 2>&1 >/dev/null; then
-                apt update
-                apt install -y sudo
-              fi
+        # `unzip`    is necessary to install `protoc`
+        # `gcc`      is necessary to run `go test -race`
+        # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
+        # `xz-utils` is necessary to decompress xz files
+        run: |
+          if [ -r /etc/os-release ]; then source /etc/os-release; fi
+          case "$ID" in
+          ubuntu)
+            if ! command -v sudo 2>&1 >/dev/null; then
+              apt update
+              apt install -y sudo
+            fi
 
-              sudo apt update
-              sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
-              ;;
-            esac
+            sudo apt update
+            sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
+            ;;
+          esac
 
       # GitHub actions does not share cache across multiple jobs,
       # so we have to operate cache in each job and action file
@@ -86,25 +84,20 @@ jobs:
         with:
           go-version-file: go.mod
       - name: "Install basic tools"
-        run:
-          # `unzip`    is necessary to install `protoc`
-          # `gcc`      is necessary to run `go test -race`
-          # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
-          # `xz-utils` is necessary to decompress xz files
-          name: "Install basic tools"
-          command: |
-            if [ -r /etc/os-release ]; then source /etc/os-release; fi
-            case "$ID" in
-            ubuntu)
-              if ! command -v sudo 2>&1 >/dev/null; then
-                apt update
-                apt install -y sudo
-              fi
+        run: |
+          if [ -r /etc/os-release ]; then source /etc/os-release; fi
+          case "$ID" in
+          ubuntu)
+            if ! command -v sudo 2>&1 >/dev/null; then
+              apt update
+              apt install -y sudo
+            fi
 
-              sudo apt update
-              sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
-              ;;
-            esac
+            sudo apt update
+            sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
+            ;;
+          esac
+
       - uses: actions/cache/restore@v3
         with:
           path: |
@@ -163,25 +156,20 @@ jobs:
         with:
           go-version-file: go.mod
       - name: "Install basic tools"
-        run:
-          # `unzip`    is necessary to install `protoc`
-          # `gcc`      is necessary to run `go test -race`
-          # `git`      is necessary because the CircleCI version is different somehow ¯\_(ツ)_/¯
-          # `xz-utils` is necessary to decompress xz files
-          name: "Install basic tools"
-          command: |
-            if [ -r /etc/os-release ]; then source /etc/os-release; fi
-            case "$ID" in
-            ubuntu)
-              if ! command -v sudo 2>&1 >/dev/null; then
-                apt update
-                apt install -y sudo
-              fi
+        run: |
+          if [ -r /etc/os-release ]; then source /etc/os-release; fi
+          case "$ID" in
+          ubuntu)
+            if ! command -v sudo 2>&1 >/dev/null; then
+              apt update
+              apt install -y sudo
+            fi
 
-              sudo apt update
-              sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
-              ;;
-            esac
+            sudo apt update
+            sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
+            ;;
+          esac
+
       - uses: actions/cache/restore@v3
         with:
           path: |
