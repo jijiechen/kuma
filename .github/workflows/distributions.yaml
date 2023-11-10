@@ -131,13 +131,13 @@ jobs:
         #          label: "ci/skip-test"
 
         run: |
-          # make test TEST_REPORTS=1
-        #      - name: Save test reports
-        #        uses: actions/upload-artifact@v2
-        #        with:
-        #          name: test-reports
-        #          path: build/reports
-        #          retention-days: 30
+          make test TEST_REPORTS=1
+      - name: Save test reports
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-reports
+          path: build/reports
+          retention-days: 30
       - name: Cleanup build folder
         run: |
           rm -rf ./build
@@ -197,6 +197,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: build-output
+          path: build
       - name: Inspect created tars
         run: |
           for i in build/distributions/out/*.tar.gz; do echo $i; tar -tvf $i; done
