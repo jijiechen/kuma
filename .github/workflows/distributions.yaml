@@ -100,6 +100,12 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
           fail-on-cache-miss: true
           # todo: support skip test
+      - name: Free up disk space for the Runner
+        run: |
+          sudo swapoff /swapfile
+          sudo rm -rf /swapfile /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker system prune --all -f
+          sudo df -h
       - name: Run tests
         #      - when:
         #          condition: {equal: [arm64, << parameters.arch >>]}
