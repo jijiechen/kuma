@@ -5,6 +5,7 @@ on:
   pull_request_target:
     branches:
       - 'commit-workflow'
+# push and trigger
 jobs:
   build:
     runs-on: ubuntu-latest
