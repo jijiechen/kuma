@@ -1,14 +1,14 @@
+name: "distribute"
 on:
   push:
     branches: ["commit-workflow"]
 jobs:
   build:
-    runs-on: ubuntu-latest # todo: amd64/arm64
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - name: "Install basic tools"
         # `unzip`    is necessary to install `protoc`
         # `gcc`      is necessary to run `go test -race`
@@ -22,33 +22,24 @@ jobs:
               apt update
               apt install -y sudo
             fi
-
             sudo apt update
             sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
             ;;
           esac
-      # GitHub actions does not share cache across multiple jobs,
-      # so we have to operate cache in each job and action file
-      - id: retrieve-cache
-        uses: actions/cache/restore@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/.kuma-dev
-          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
       - uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
-      - if: steps.retrieve-cache.outputs.cache-hit != 'true'
-        run: |
-          make dev/tools
-      - if: steps.retrieve-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v3
+      # GitHub actions does not share cache across multiple jobs,
+      # so we have to operate cache in each job and action file
+      - uses: actions/cache@v3
         with:
           path: |
-            ~/.cache/go-build
             ~/.kuma-dev
-          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
+          key: ${{ runner.os }}-devtools-${{ hashFiles('mk/dependencies/deps.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-devtools
+      - run: |
+          make dev/tools
       - run: |
           make clean
       - run: |
@@ -74,39 +65,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
-      - name: "Install basic tools"
-        run: |
-          if [ -r /etc/os-release ]; then source /etc/os-release; fi
-          case "$ID" in
-          ubuntu)
-            if ! command -v sudo 2>&1 >/dev/null; then
-              apt update
-              apt install -y sudo
-            fi
-
-            sudo apt update
-            sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
-            ;;
-          esac
-      - uses: actions/cache/restore@v3
+      # GitHub actions does not share cache across multiple jobs,
+      # so we have to operate cache in each job and action file
+      - uses: actions/cache@v3
         with:
           path: |
-            ~/.cache/go-build
             ~/.kuma-dev
-          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
-          fail-on-cache-miss: true
-          # todo: support skip test
+          key: ${{ runner.os }}-devtools-${{ hashFiles('mk/dependencies/deps.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-devtools
       - name: Free up disk space for the Runner
         run: |
           # source: https://github.com/apache/flink/blob/master/tools/azure-pipelines/free_disk_space.sh
           echo "=============================================================================="
           echo "Freeing up disk space on CI system"
           echo "=============================================================================="
-
           echo "Listing 100 largest packages"
           dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
           df -h
@@ -123,13 +99,6 @@ jobs:
           docker system prune --all -f
           sudo df -h
       - name: Run tests
-        #      - when:
-        #          condition: {equal: [arm64, << parameters.arch >>]}
-        #          steps:
-        #            - halt_non_priority_job
-        #      - halt_job_if_labeled:
-        #          label: "ci/skip-test"
-
         run: |
           make test TEST_REPORTS=1
       - name: Save test reports
@@ -145,13 +114,6 @@ jobs:
         with:
           name: build-output
           path: build
-          #      - halt_job_if_labeled:
-          #          label: "ci/skip-container-structure-test"
-          #      - halt_job_if_labeled:
-          #          label: "ci/skip-test"
-          #      - setenv_depending_on_priority:
-          #          label: "ci/run-full-matrix"
-          #          env: ENABLED_GOARCHES="arm64 amd64"
       - run: |
           sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
       - run: |
@@ -163,37 +125,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
-      - name: "Install basic tools"
-        run: |
-          if [ -r /etc/os-release ]; then source /etc/os-release; fi
-          case "$ID" in
-          ubuntu)
-            if ! command -v sudo 2>&1 >/dev/null; then
-              apt update
-              apt install -y sudo
-            fi
-
-            sudo apt update
-            sudo env DEBIAN_FRONTEND=noninteractive apt install -y curl git make unzip gcc xz-utils
-            ;;
-          esac
-      - uses: actions/cache/restore@v3
+      # GitHub actions does not share cache across multiple jobs,
+      # so we have to operate cache in each job and action file
+      - uses: actions/cache@v3
         with:
           path: |
-            ~/.cache/go-build
             ~/.kuma-dev
-          key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}-${{ hashFiles('mk/dependencies/deps.lock') }}
-          fail-on-cache-miss: true
-          #      - setenv_depending_on_priority:
-          #          label: ci/force-publish
-          #          env: ALLOW_PUSH=true
-          #      - setenv_depending_on_priority:
-          #          label: ci/run-full-matrix
-          #          env: ENABLED_GOARCHES="arm64 amd64" ENABLED_GOOSES="linux darwin"
+          key: ${{ runner.os }}-devtools-${{ hashFiles('mk/dependencies/deps.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-devtools
       - uses: actions/download-artifact@v2
         with:
           name: build-output
@@ -208,7 +151,7 @@ jobs:
         run: |
           make docker/load
       - name: Publish images
-        run: |
+        run: |-
           make docker/login
           # ensure we always logout
           function on_exit() {
