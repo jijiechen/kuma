@@ -5,7 +5,6 @@ on:
   pull_request_target:
     branches:
       - 'commit-workflow'
-# push and trigger
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -175,3 +174,87 @@ jobs:
           trap on_exit EXIT
           make docker/push
           make docker/manifest
+
+
+  e2e_legacy:
+    name: "legacy-k8s:${{ matrix.arch }}-${{ matrix.k8sVersion }}"
+    needs: build
+    uses: jijiechen/kuma/.github/workflows/e2e.yaml@commit-workflow-2
+    strategy:
+      matrix:
+        k8sVersion:
+        - v1.23.17-k3s1
+        - v1.28.1-k3s1
+        - kind
+        - kindIpv6
+        arch:
+        - amd64
+        - arm64
+    with:
+      k8sVersion: ${{ matrix.k8sVersion }}
+      arch: ${{ matrix.arch }}
+      parallelism: 3
+      target: ""
+
+  e2e_main:
+    name: "${{ matrix.target }}:${{ matrix.arch }}-${{ matrix.k8sVersion }}"
+    needs: build
+    uses: jijiechen/kuma/.github/workflows/e2e.yaml@commit-workflow-2
+    strategy:
+      matrix:
+        k8sVersion:
+        - v1.23.17-k3s1
+        - v1.28.1-k3s1
+        - kind
+        - kindIpv6
+        target:
+        - kubernetes
+        - universal
+        - multizone
+        arch:
+        - amd64
+        - arm64
+    with:
+      k8sVersion: ${{ matrix.k8sVersion }}
+      target: ${{ matrix.target }}
+      arch: ${{ matrix.arch }}
+
+  e2e_delta_kds:
+    name: "${{ matrix.target }}:${{ matrix.arch }}-${{ matrix.k8sVersion }}-delta-kds"
+    needs: build
+    uses: jijiechen/kuma/.github/workflows/e2e.yaml@commit-workflow-2
+    strategy:
+      matrix:
+        k8sVersion:
+        - v1.28.1-k3s1
+        target:
+        - multizone
+        arch:
+        - amd64
+        deltaKDS:
+        - true
+    with:
+      k8sVersion: ${{ matrix.k8sVersion }}
+      target: ${{ matrix.arch }}
+      arch: ${{ matrix.arch }}
+      deltaKDS: ${{ matrix.deltaKDS }}
+
+  e2e_calico:
+    name: "${{ matrix.target }}:${{ matrix.arch }}-${{ matrix.k8sVersion }}-calico"
+    needs: build
+    uses: jijiechen/kuma/.github/workflows/e2e.yaml@commit-workflow-2
+    strategy:
+      matrix:
+        k8sVersion:
+        - v1.28.1-k3s1
+        target:
+        - multizone
+        arch:
+        - amd64
+        cniNetworkPlugin:
+        - calico
+    with:
+      k8sVersion: ${{ matrix.k8sVersion }}
+      target: ${{ matrix.arch }}
+      arch: ${{ matrix.arch }}
+      cniNetworkPlugin: ${{ matrix.cniNetworkPlugin }}

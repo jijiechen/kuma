@@ -1,0 +1,174 @@
+name: e2e
+on:
+  workflow_dispatch:
+    inputs:
+      k8sVersion:
+        description: version of k3s to use or "kind" and "kindIpv6"
+        type: string
+        default: v1.28.1-k3s1
+        required: false
+      parallelism:
+        description: level of parallelization
+        type: number
+        default: 1
+        required: false
+      target:
+        description: makefile target without e2e prefix
+        type: string
+        default: ""
+        required: false
+      arch:
+        description: The golang arch
+        type: string
+        default: amd64
+        required: false
+      cniNetworkPlugin:
+        description: The CNI networking plugin to use [flannel | calico]
+        type: string
+        default: flannel
+        required: false
+      deltaKDS:
+        description: if should run tests with new implementation of KDS
+        type: boolean
+        default: false
+        required: false
+
+jobs:
+  skip_check:
+    runs-on: ${{ inputs.arch == "amd64" && 'ubuntu-latest' || 'arm64-not-supported' }}
+    outputs:
+      should_skip: | 
+        ${{ 
+          steps.check_if_skip_by_label.outputs.skip == "true" || 
+          steps.check_if_skip_non_priority.outputs.skip == "true" || 
+          steps.check_if_skip_invalid_params.outputs.skip == "true" || 
+        }}
+    steps:
+    - id: check_if_skip_by_label
+      name: "Check if job skipped by label"
+      if: ${{ contains(github.event.pull_request.labels.*.name, 'ci/skip-test') || contains(github.event.pull_request.labels.*.name, 'ci/skip-e2e-test')  }}
+      run: |
+        echo "skip=true" >> $GITHUB_OUTPUT
+    - id: check_if_skip_non_priority
+      name: "Check if job non-priority and should be skipped"
+      if: |
+        ${{ !contains(github.event.pull_request.labels.*.name, 'ci/run-full-matrix') && (
+          "" == inputs.target ||
+          "calico" == inputs.cniNetworkPlugin ||
+          "kindIpv6" == inputs.k8sVersion ||
+          "arm64" == inputs.arch ||
+          "true" == inputs.deltaKDS ||
+          "v1.23.17-k3s1" == inputs.k8sVersion 
+        ) }}
+      run: |
+        echo "skip=true" >> $GITHUB_OUTPUT
+    # This works around circleci limitation by skipping tests for combinations that don't make sense
+    # See: https://discuss.circleci.com/t/matrix-exclude-entire-subset/43879
+    - id: check_if_skip_invalid_params
+      name: Skip Invalid Parameter Combinations
+      run: |
+        echo "Running with: \
+          k8s: ${{ inputs.k8sVersion }} \
+          target: ${{ inputs.target }} \
+          parallelism: ${{ inputs.parallelism }} \
+          arch: ${{ inputs.arch }} \
+          cniNetworkPlugin: ${{ inputs.cniNetworkPlugin }} \
+        "
+        function skip() {
+          echo "Non valid job combination halting job reason: $1"
+          circleci-agent step halt
+          exit 0
+        }
+        
+        # Handle invalid test combinations
+        if [[ "${{ inputs.k8sVersion }}" == "kind" && "${{ inputs.target }}" != "universal" ]]; then
+          skip "kind should only be used when testing ipv6 or with e2e-universal"
+          echo "skip=true" >> $GITHUB_OUTPUT
+        fi
+        if [[ "${{ inputs.k8sVersion }}" != kind* && "${{ inputs.target }}" == "universal" ]]; then
+          skip "universal only runs on kind"
+          echo "skip=true" >> $GITHUB_OUTPUT
+        fi
+        echo "Continuing tests"
+
+  e2e:
+    needs: skip_check
+    runs-on: ${{ inputs.arch == "amd64" && 'ubuntu-latest' || 'arm64-not-supported' }}
+    if: ${{ jobs.skip_check.outputs.should_skip != "true" }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.kuma-dev
+          key: ${{ runner.os }}-devtools-${{ hashFiles('mk/dependencies/deps.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-devtools
+
+      - name: "Setup helm"
+        if: ${{ steps.check_if_skip_non_priority.outputs.skip != "true" &&  steps.check_if_skip_invalid_params.outputs.skip != "true" }}
+        run: |
+          make dev/set-kuma-helm-repo
+      # CircleCI's DNS on IPV6 prevents resolving inside Kind. When change to 8.8.8.8 and remove "search" section (. removes it), resolving works again
+      - if: ${{ "kindIpv6" == inputs.k8sVersion }}
+        name: Enable IPV6 and change DNS
+        run: |
+            cat \<<'EOF' | sudo tee /etc/docker/daemon.json
+            {
+              "ipv6": true,
+              "fixed-cidr-v6": "2001:db8:1::/64",
+              "dns": ["8.8.8.8"],
+              "dns-search": ["."]
+            }
+            EOF
+            sudo service docker restart
+      - name: "Run E2E tests"
+        run: |
+            if [[ "${{ inputs.k8sVersion }}" == "kindIpv6" ]]; then
+              export IPV6=true
+              export K8S_CLUSTER_TOOL=kind
+              export KUMA_DEFAULT_RETRIES=60
+              export KUMA_DEFAULT_TIMEOUT="6s"
+            fi
+            if [[ "${{ inputs.k8sVersion }}" != "kind"* ]]; then
+              export CI_K3S_VERSION=${{ inputs.k8sVersion }}
+              export K3D_NETWORK_CNI=${{ inputs.cniNetworkPlugin }}
+            fi
+            if [[ "${{ inputs.arch }}" == "arm64" ]]; then
+              export MAKE_PARAMETERS="-j1"
+            else
+              export MAKE_PARAMETERS="-j2"
+            fi
+
+            if [[ "${{ inputs.deltaKDS }}" == true ]]; then
+              export KUMA_DELTA_KDS=true
+              export KUMA_EXPERIMENTAL_KDS_EVENT_BASED_WATCHDOG_ENABLED=true
+            fi
+
+            if [[ "${{ inputs.target }}" == "" ]]; then
+              export GINKGO_E2E_LABEL_FILTERS="job-$CIRCLE_NODE_INDEX"
+            fi
+            env
+            if [[ "${{ inputs.target }}" != "" ]]; then
+              target="test/e2e-${{ inputs.target }}"
+            else
+              target="test/e2e"
+            fi
+            make ${MAKE_PARAMETERS} CI=true "${target}"
+      - name: Store e2e test reports
+        uses: actions/upload-artifact@v2
+        with:
+          name: e2e-test-reports
+          path: build/reports
+          retention-days: 30
+      - name: Store e2e test logs
+        uses: actions/upload-artifact@v2
+        with:
+          name: e2e-test-logs
+          path: /tmp/e2e
+          retention-days: 30
