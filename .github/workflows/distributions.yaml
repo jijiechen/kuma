@@ -129,6 +129,8 @@ jobs:
           make test/container-structure
   distributions:
     needs: test
+    # this jobs will still run even if "test" is skipped
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
