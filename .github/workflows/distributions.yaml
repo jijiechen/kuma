@@ -2,6 +2,12 @@ name: "distribute"
 on:
   push:
     branches: ["commit-workflow"]
+  pull_request:
+    branches:
+      - 'commit-workflow'
+  pull_request_target:
+    branches:
+      - 'commit-workflow'
 jobs:
   build:
     runs-on: ubuntu-latest
