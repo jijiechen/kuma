@@ -61,6 +61,7 @@ jobs:
   test:
     needs: build
     runs-on: ubuntu-latest
+    if: ${{ ! contains(github.event.pull_request.labels.*.name, 'ci/skip-test') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,12 +112,17 @@ jobs:
         run: |
           rm -rf ./build
       - uses: actions/download-artifact@v2
+        if: ${{ ! contains(github.event.pull_request.labels.*.name, 'ci/skip-container-structure-test') }}
         with:
           name: build-output
           path: build
-      - run: |
+      - name: Prepare for container structure test
+        if: ${{ ! contains(github.event.pull_request.labels.*.name, 'ci/skip-container-structure-test') }}
+        run: |
           sudo apt-get update; sudo apt-get install -y qemu-user-static binfmt-support
-      - run: |
+      - name: Run container structure test
+        if: ${{ ! contains(github.event.pull_request.labels.*.name, 'ci/skip-container-structure-test') }}
+        run: |
           make test/container-structure
   distributions:
     needs: test
