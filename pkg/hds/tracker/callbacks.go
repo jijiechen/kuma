@@ -115,7 +115,7 @@ func (t *tracker) OnHealthCheckRequest(streamID xds.StreamID, req *envoy_service
 	streams.activeStreams[streamID] = true
 
 	if streams.watchdogCancel == nil { // watchdog was not started yet
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "streamid", streamID))
 		streams.watchdogCancel = cancel
 		// kick off watchdog for that Dataplane
 		go t.newWatchdog(req.Node).Start(ctx)
@@ -142,7 +142,7 @@ func (t *tracker) newWatchdog(node *envoy_core.Node) util_xds_v3.Watchdog {
 			t.metrics.HdsGenerationsErrors.Inc()
 			t.log.Error(err, "OnTick() failed")
 		},
-		OnStop: func() {
+		OnStop: func(ctx context.Context) {
 			if err := t.reconciler.Clear(node); err != nil {
 				t.log.Error(err, "OnTick() failed")
 			}

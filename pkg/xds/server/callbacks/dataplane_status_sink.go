@@ -116,7 +116,7 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 				sinkLog.Error(err, "failed to flush DataplaneInsight", "dataplaneid", dataplaneID)
 			}
 		} else {
-			sinkLog.V(1).Info("DataplaneInsight saved", "dataplaneid", dataplaneID, "subscription", currentState)
+			sinkLog.V(1).Info("DataplaneInsight saved", "dataplaneid", dataplaneID, "subscription", currentState, "secrets", secretsInfo)
 			lastStoredState = currentState
 			lastStoredSecretsInfo = secretsInfo
 		}

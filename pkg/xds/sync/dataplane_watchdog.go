@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	std_errors "errors"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -129,6 +130,18 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context, metadata *core_xd
 		ProxyType: mesh_proto.DataplaneProxyType,
 	}
 	if !syncForCert && !syncForConfig {
+		generatedAt := time.Time{}
+		if certInfo != nil {
+			generatedAt = certInfo.Generation
+		}
+		expireAt := time.Time{}
+		if certInfo != nil {
+			expireAt = certInfo.Expiration
+		}
+
+		d.log.V(2).Info("skipping dataplane reconciling",
+			"configHash", d.lastHash,
+			"nilCertInfo", certInfo == nil, "certGeneratedAt", generatedAt, "certExpireAt", expireAt)
 		result.Status = SkipStatus
 		return result, nil
 	}

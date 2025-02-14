@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"github.com/kumahq/kuma/pkg/core"
 	"strings"
 	"time"
 
@@ -42,7 +43,12 @@ type kubeAuthenticator struct {
 var _ auth.Authenticator = &kubeAuthenticator{}
 
 func (k *kubeAuthenticator) Authenticate(ctx context.Context, resource model.Resource, credential auth.Credential) error {
-	if _, authenticated := k.authenticated.GetIfPresent(credential); authenticated {
+	if lastAuthAt, authenticated := k.authenticated.GetIfPresent(credential); authenticated {
+		if lastAuthAt.(time.Time).Add(2 * time.Minute).After(core.Now()) {
+			k.authenticated.Invalidate(credential)
+			return errors.Errorf("session expired")
+		}
+
 		return nil
 	}
 
@@ -58,7 +64,7 @@ func (k *kubeAuthenticator) Authenticate(ctx context.Context, resource model.Res
 		return err
 	}
 
-	k.authenticated.Put(credential, struct{}{})
+	k.authenticated.Put(credential, core.Now())
 	return nil
 }
 

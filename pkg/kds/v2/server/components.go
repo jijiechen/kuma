@@ -145,7 +145,7 @@ func newSyncTracker(
 				kdsMetrics.KdsGenerationErrors.Inc()
 				log.Error(err, "OnTick() failed")
 			},
-			OnStop: func() {
+			OnStop: func(ctx context.Context) {
 				if err := reconciler.Clear(node); err != nil {
 					log.Error(err, "OnStop() failed")
 				}

@@ -54,7 +54,9 @@ func (d *dataplaneWatchdogFactory) New(dpKey model.ResourceKey) util_xds_v3.Watc
 			d.xdsMetrics.XdsGenerationsErrors.Inc()
 			log.Error(err, "OnTick() failed")
 		},
-		OnStop: func() {
+		OnStop: func(ctx context.Context) {
+			streamId := ctx.Value("streamid").(string)
+			log.V(2).Info("stopping dataplane watchdog", "streamId", streamId)
 			if err := dataplaneWatchdog.Cleanup(); err != nil {
 				log.Error(err, "OnTick() failed")
 			}

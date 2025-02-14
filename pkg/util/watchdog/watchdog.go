@@ -11,7 +11,7 @@ type SimpleWatchdog struct {
 	NewTicker func() *time.Ticker
 	OnTick    func(context.Context) error
 	OnError   func(error)
-	OnStop    func()
+	OnStop    func(context.Context)
 }
 
 func (w *SimpleWatchdog) Start(ctx context.Context) {
@@ -32,7 +32,7 @@ func (w *SimpleWatchdog) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			if w.OnStop != nil {
-				w.OnStop()
+				w.OnStop(ctx)
 			}
 			return
 		default:
