@@ -21,6 +21,8 @@ import (
 	xds_metrics "github.com/kumahq/kuma/pkg/xds/metrics"
 )
 
+var log = core.Log.WithName("kube-authenticator")
+
 func New(client kube_client.Client, metrics *xds_metrics.Metrics) auth.Authenticator {
 	authCache := cache.New(
 		cache.WithExpireAfterAccess(1*time.Hour),
@@ -44,7 +46,8 @@ var _ auth.Authenticator = &kubeAuthenticator{}
 
 func (k *kubeAuthenticator) Authenticate(ctx context.Context, resource model.Resource, credential auth.Credential) error {
 	if lastAuthAt, authenticated := k.authenticated.GetIfPresent(credential); authenticated {
-		if lastAuthAt.(time.Time).Add(2 * time.Minute).After(core.Now()) {
+		if lastAuthAt.(time.Time).Add(2 * time.Minute).Before(core.Now()) {
+			log.V(1).Info("session expired", "lastAuthAt", lastAuthAt.(time.Time), "credential", credential)
 			k.authenticated.Invalidate(credential)
 			return errors.Errorf("session expired")
 		}
@@ -52,6 +55,7 @@ func (k *kubeAuthenticator) Authenticate(ctx context.Context, resource model.Res
 		return nil
 	}
 
+	log.V(1).Info("authenticating", "resource", resource.Descriptor().Name, "credential", credential)
 	var err error
 	switch resource := resource.(type) {
 	case *core_mesh.DataplaneResource, *core_mesh.ZoneIngressResource, *core_mesh.ZoneEgressResource:
@@ -61,9 +65,11 @@ func (k *kubeAuthenticator) Authenticate(ctx context.Context, resource model.Res
 	}
 
 	if err != nil {
+		log.Info("authentication failed", "resource", resource.Descriptor().Name, "credential", credential, "err", err)
 		return err
 	}
 
+	log.V(1).Info("authenticated successfully", "resource", resource.Descriptor().Name, "credential", credential)
 	k.authenticated.Put(credential, core.Now())
 	return nil
 }

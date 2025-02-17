@@ -2,6 +2,7 @@ package v3
 
 import (
 	"context"
+	"fmt"
 
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_types "github.com/envoyproxy/go-control-plane/pkg/cache/types"
@@ -29,6 +30,12 @@ type reconciler struct {
 	generator      snapshotGenerator
 	cacher         snapshotCacher
 	statsCallbacks util_xds.StatsCallbacks
+}
+
+type resourceVersionChange struct {
+	resourceType int
+	prevVersion  string
+	newVersion   string
 }
 
 func (r *reconciler) Clear(proxyId *model.ProxyId) error {
@@ -94,14 +101,14 @@ func (r *reconciler) Reconcile(ctx context.Context, xdsCtx xds_context.Context, 
 	if err := snapshot.Consistent(); err != nil {
 		return false, errors.Wrap(err, "inconsistent snapshot")
 	}
-	log.Info("config has changed", "versions", changed)
+	log.Info("config has changed", "versions", fmt.Sprintf("%#v", changed))
 
 	if err := r.cacher.Cache(ctx, node, snapshot); err != nil {
 		return false, errors.Wrap(err, "failed to store snapshot")
 	}
 
 	for _, version := range changed {
-		r.statsCallbacks.ConfigReadyForDelivery(version)
+		r.statsCallbacks.ConfigReadyForDelivery(version.newVersion)
 	}
 	return true, nil
 }
@@ -119,15 +126,19 @@ func validateResource(r envoy_types.Resource) error {
 	}
 }
 
-func autoVersion(old *envoy_cache.Snapshot, new *envoy_cache.Snapshot) (*envoy_cache.Snapshot, []string) {
+func autoVersion(old *envoy_cache.Snapshot, new *envoy_cache.Snapshot) (*envoy_cache.Snapshot, []resourceVersionChange) {
 	for resourceType, resources := range old.Resources {
 		new.Resources[resourceType] = reuseVersion(resources, new.Resources[resourceType])
 	}
 
-	var changed []string
+	var changed []resourceVersionChange
 	for resourceType, resource := range new.Resources {
 		if old.Resources[resourceType].Version != resource.Version {
-			changed = append(changed, resource.Version)
+			changed = append(changed,
+				resourceVersionChange{
+					resourceType: resourceType,
+					prevVersion:  old.Resources[resourceType].Version,
+					newVersion:   resource.Version})
 		}
 	}
 
