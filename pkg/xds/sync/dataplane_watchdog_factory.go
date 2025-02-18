@@ -55,7 +55,6 @@ func (d *dataplaneWatchdogFactory) New(dpKey model.ResourceKey) util_xds_v3.Watc
 			log.Error(err, "OnTick() failed")
 		},
 		OnStop: func(ctx context.Context) {
-			<-time.After(15 * time.Second)
 			streamId := ctx.Value("streamid").(int64)
 			log.V(2).Info("cleaning up dataplane watchdog", "streamId", streamId)
 			if err := dataplaneWatchdog.Cleanup(); err != nil {
