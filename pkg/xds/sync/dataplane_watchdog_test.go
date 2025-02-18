@@ -47,7 +47,7 @@ func (s *staticSnapshotReconciler) Reconcile(_ context.Context, _ xds_context.Co
 	return true, nil
 }
 
-func (s *staticSnapshotReconciler) Clear(proxyId *core_xds.ProxyId) error {
+func (s *staticSnapshotReconciler) Clear(proxyId *core_xds.ProxyId, streamID core_xds.StreamID) error {
 	return nil
 }
 

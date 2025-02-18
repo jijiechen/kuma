@@ -20,10 +20,10 @@ type ConnectionInfoTracker interface {
 // SnapshotReconciler reconciles Envoy XDS configuration (Snapshot) by executing all generators (pkg/xds/generator)
 type SnapshotReconciler interface {
 	Reconcile(context.Context, xds_context.Context, *core_xds.Proxy) (bool, error)
-	Clear(proxyId *core_xds.ProxyId) error
+	Clear(proxyId *core_xds.ProxyId, streamID core_xds.StreamID) error
 }
 
 // DataplaneWatchdogFactory returns a Watchdog that creates a new XdsContext and Proxy and executes SnapshotReconciler if there is any change
 type DataplaneWatchdogFactory interface {
-	New(dpKey core_model.ResourceKey) util_xds_v3.Watchdog
+	New(dpKey core_model.ResourceKey, streamID core_xds.StreamID) util_xds_v3.Watchdog
 }

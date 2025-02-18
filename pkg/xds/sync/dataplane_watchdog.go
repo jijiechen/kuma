@@ -46,8 +46,9 @@ type SyncResult struct {
 
 type DataplaneWatchdog struct {
 	DataplaneWatchdogDependencies
-	key core_model.ResourceKey
-	log logr.Logger
+	key      core_model.ResourceKey
+	streamID core_xds.StreamID
+	log      logr.Logger
 
 	// state of watchdog
 	lastHash         string // last Mesh hash that was used to **successfully** generate Reconcile Envoy config
@@ -57,10 +58,11 @@ type DataplaneWatchdog struct {
 	dpAddress        string
 }
 
-func NewDataplaneWatchdog(deps DataplaneWatchdogDependencies, dpKey core_model.ResourceKey) *DataplaneWatchdog {
+func NewDataplaneWatchdog(deps DataplaneWatchdogDependencies, dpKey core_model.ResourceKey, streamID core_xds.StreamID) *DataplaneWatchdog {
 	return &DataplaneWatchdog{
 		DataplaneWatchdogDependencies: deps,
 		key:                           dpKey,
+		streamID:                      streamID,
 		log:                           core.Log.WithName("xds").WithValues("key", dpKey),
 		proxyTypeSettled:              false,
 	}
@@ -93,9 +95,9 @@ func (d *DataplaneWatchdog) Cleanup() error {
 	switch d.dpType {
 	case mesh_proto.DataplaneProxyType:
 		d.EnvoyCpCtx.Secrets.Cleanup(mesh_proto.DataplaneProxyType, d.key)
-		return d.DataplaneReconciler.Clear(&proxyID)
+		return d.DataplaneReconciler.Clear(&proxyID, d.streamID)
 	case mesh_proto.IngressProxyType:
-		return d.IngressReconciler.Clear(&proxyID)
+		return d.IngressReconciler.Clear(&proxyID, d.streamID)
 	case mesh_proto.EgressProxyType:
 		aggregatedMeshCtxs, aggregateMeshContextsErr := xds_context.AggregateMeshContexts(
 			context.TODO(),
@@ -108,7 +110,7 @@ func (d *DataplaneWatchdog) Cleanup() error {
 				core_model.ResourceKey{Mesh: mesh.GetMeta().GetName(), Name: d.key.Name},
 			)
 		}
-		return std_errors.Join(aggregateMeshContextsErr, d.EgressReconciler.Clear(&proxyID))
+		return std_errors.Join(aggregateMeshContextsErr, d.EgressReconciler.Clear(&proxyID, d.streamID))
 	default:
 		return nil
 	}

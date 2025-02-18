@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	"time"
 
 	"github.com/kumahq/kuma/pkg/core"
@@ -31,9 +32,9 @@ func NewDataplaneWatchdogFactory(
 	}, nil
 }
 
-func (d *dataplaneWatchdogFactory) New(dpKey model.ResourceKey) util_xds_v3.Watchdog {
-	log := xdsServerLog.WithName("dataplane-sync-watchdog").WithValues("dataplaneKey", dpKey)
-	dataplaneWatchdog := NewDataplaneWatchdog(d.deps, dpKey)
+func (d *dataplaneWatchdogFactory) New(dpKey model.ResourceKey, streamID core_xds.StreamID) util_xds_v3.Watchdog {
+	log := xdsServerLog.WithName("dataplane-sync-watchdog").WithValues("dataplaneKey", dpKey, "streamID", streamID)
+	dataplaneWatchdog := NewDataplaneWatchdog(d.deps, dpKey, streamID)
 	return &util_watchdog.SimpleWatchdog{
 		NewTicker: func() *time.Ticker {
 			return time.NewTicker(d.refreshInterval)
@@ -55,6 +56,7 @@ func (d *dataplaneWatchdogFactory) New(dpKey model.ResourceKey) util_xds_v3.Watc
 			log.Error(err, "OnTick() failed")
 		},
 		OnStop: func() {
+			log.V(2).Info("cleaning up dataplane watchdog")
 			if err := dataplaneWatchdog.Cleanup(); err != nil {
 				log.Error(err, "OnTick() failed")
 			}

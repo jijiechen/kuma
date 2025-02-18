@@ -2,6 +2,10 @@ package v3
 
 import (
 	"context"
+	"fmt"
+	"go.uber.org/multierr"
+	"strconv"
+	"strings"
 
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_types "github.com/envoyproxy/go-control-plane/pkg/cache/types"
@@ -31,21 +35,20 @@ type reconciler struct {
 	statsCallbacks util_xds.StatsCallbacks
 }
 
-func (r *reconciler) Clear(proxyId *model.ProxyId) error {
+func (r *reconciler) Clear(proxyId *model.ProxyId, streamID model.StreamID) error {
 	nodeId := &envoy_core.Node{Id: proxyId.String()}
 	r.clearUndeliveredConfigStats(nodeId)
-	r.cacher.Clear(nodeId)
+	r.cacher.Clear(nodeId, streamID)
 	return nil
 }
 
 func (r *reconciler) clearUndeliveredConfigStats(nodeId *envoy_core.Node) {
-	snap, err := r.cacher.Get(nodeId)
-	if err != nil {
-		return // already cleared
-	}
-	for _, res := range snap.Resources {
-		if res.Version != "" {
-			r.statsCallbacks.DiscardConfig(res.Version)
+	snapshots := r.cacher.Get(nodeId)
+	for _, snapshot := range snapshots {
+		for _, res := range snapshot.Resources {
+			if res.Version != "" {
+				r.statsCallbacks.DiscardConfig(res.Version)
+			}
 		}
 	}
 }
@@ -57,17 +60,29 @@ func (r *reconciler) Reconcile(ctx context.Context, xdsCtx xds_context.Context, 
 		return false, errors.Wrapf(err, "failed to generate a snapshot")
 	}
 
-	// To avoid assigning a new version every time, compare with
-	// the previous snapshot and reuse its version whenever possible,
-	// fallback to UUID otherwise
-	previous, err := r.cacher.Get(node)
-	if err != nil {
-		previous = &envoy_cache.Snapshot{}
+	previousSnapshots := r.cacher.Get(node)
+
+	changed := false
+	var errs []error
+	for streamID, previousSnapshot := range previousSnapshots {
+		// To avoid assigning a new version every time, compare with
+		// the previous snapshot and reuse its version whenever possible,
+		// fallback to UUID otherwise
+		changedOnStream, err := r.reconcileOnStream(ctx, proxy, streamID, previousSnapshot, snapshot)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		changed = changed || changedOnStream
 	}
 
-	snapshot, changed := autoVersion(previous, snapshot)
+	return changed, multierr.Combine(errs...)
+}
+
+func (r *reconciler) reconcileOnStream(ctx context.Context, proxy *model.Proxy, streamID model.StreamID,
+	previousSnapshot *envoy_cache.Snapshot, newSnapshot *envoy_cache.Snapshot) (bool, error) {
+	snapshot, changed := autoVersion(previousSnapshot, newSnapshot)
 	// We need to force new version of EDS, otherwise clusters will be stuck in warming state.
-	if previous.GetVersion(envoy_resource.ClusterType) != snapshot.GetVersion(envoy_resource.ClusterType) {
+	if previousSnapshot.GetVersion(envoy_resource.ClusterType) != snapshot.GetVersion(envoy_resource.ClusterType) {
 		snapshot.Resources[envoy_types.Endpoint].Version = core.NewUUID()
 	}
 
@@ -79,7 +94,7 @@ func (r *reconciler) Reconcile(ctx context.Context, xdsCtx xds_context.Context, 
 	// information as possible, which is especially useful for tests
 	// that don't actually program an Envoy instance.
 	if len(changed) == 0 {
-		log.V(1).Info("config is the same")
+		log.V(1).Info("config is the same", "streamID", streamID)
 		return false, nil
 	}
 
@@ -94,9 +109,10 @@ func (r *reconciler) Reconcile(ctx context.Context, xdsCtx xds_context.Context, 
 	if err := snapshot.Consistent(); err != nil {
 		return false, errors.Wrap(err, "inconsistent snapshot")
 	}
-	log.Info("config has changed", "versions", changed)
+	log.Info("config has changed", "versions", changed, "streamID", streamID)
 
-	if err := r.cacher.Cache(ctx, node, snapshot); err != nil {
+	node := &envoy_core.Node{Id: proxy.Id.String()}
+	if err := r.cacher.Cache(ctx, node, streamID, snapshot); err != nil {
 		return false, errors.Wrap(err, "failed to store snapshot")
 	}
 
@@ -192,9 +208,9 @@ func (s *TemplateSnapshotGenerator) GenerateSnapshot(ctx context.Context, xdsCtx
 }
 
 type snapshotCacher interface {
-	Get(*envoy_core.Node) (*envoy_cache.Snapshot, error)
-	Cache(context.Context, *envoy_core.Node, *envoy_cache.Snapshot) error
-	Clear(*envoy_core.Node)
+	Get(*envoy_core.Node) map[model.StreamID]*envoy_cache.Snapshot
+	Cache(context.Context, *envoy_core.Node, model.StreamID, *envoy_cache.Snapshot) error
+	Clear(*envoy_core.Node, model.StreamID)
 }
 
 type simpleSnapshotCacher struct {
@@ -202,22 +218,49 @@ type simpleSnapshotCacher struct {
 	store  envoy_cache.SnapshotCache
 }
 
-func (s *simpleSnapshotCacher) Get(node *envoy_core.Node) (*envoy_cache.Snapshot, error) {
-	snap, err := s.store.GetSnapshot(s.hasher.ID(node))
-	if snap != nil {
-		snapshot, ok := snap.(*envoy_cache.Snapshot)
-		if !ok {
-			return nil, errors.New("couldn't convert snapshot from cache to envoy Snapshot")
+const nodeHashSeparator = ":"
+
+func (s *simpleSnapshotCacher) Get(node *envoy_core.Node) map[model.StreamID]*envoy_cache.Snapshot {
+	nodeHashPrefix := s.nodeHashPrefix(node)
+	var nodeKeys []string
+	for _, key := range s.store.GetStatusKeys() {
+		if strings.HasPrefix(key, nodeHashPrefix) {
+			nodeKeys = append(nodeKeys, key)
 		}
-		return snapshot, nil
 	}
-	return nil, err
+
+	snapshots := make(map[model.StreamID]*envoy_cache.Snapshot)
+	for _, key := range nodeKeys {
+		// error here means no snapshot is available for the key, we can safely ignore it here
+		snap, _ := s.store.GetSnapshot(key)
+		if snap != nil {
+			snapshot, ok := snap.(*envoy_cache.Snapshot)
+			if !ok {
+				reconcileLog.Error(errors.Errorf("couldn't convert snapshot of type '%T' from cache to envoy Snapshot on key '%s'", snapshot, key), "failed to retrieve snapshot")
+				continue
+			}
+
+			streamID, _ := strconv.ParseInt(key[len(nodeHashPrefix):], 10, 64) // base 10, bit size 64
+			snapshots[streamID] = snapshot
+		}
+	}
+
+	return snapshots
 }
 
-func (s *simpleSnapshotCacher) Cache(ctx context.Context, node *envoy_core.Node, snapshot *envoy_cache.Snapshot) error {
-	return s.store.SetSnapshot(ctx, s.hasher.ID(node), snapshot)
+func (s *simpleSnapshotCacher) Cache(ctx context.Context, node *envoy_core.Node, streamID model.StreamID, snapshot *envoy_cache.Snapshot) error {
+	return s.store.SetSnapshot(ctx, s.nodeHashWithStreamID(node, streamID), snapshot)
 }
 
-func (s *simpleSnapshotCacher) Clear(node *envoy_core.Node) {
-	s.store.ClearSnapshot(s.hasher.ID(node))
+func (s *simpleSnapshotCacher) Clear(node *envoy_core.Node, streamID model.StreamID) {
+	s.store.ClearSnapshot(s.nodeHashWithStreamID(node, streamID))
+}
+
+func (s *simpleSnapshotCacher) nodeHashPrefix(node *envoy_core.Node) string {
+	return fmt.Sprintf("%s%s%d", s.hasher.ID(node), nodeHashSeparator)
+}
+
+func (s *simpleSnapshotCacher) nodeHashWithStreamID(node *envoy_core.Node, streamID model.StreamID) string {
+	// node id is in format of <name>.<mesh>
+	return fmt.Sprintf("%s%d", s.nodeHashPrefix(node), nodeHashSeparator, streamID)
 }
