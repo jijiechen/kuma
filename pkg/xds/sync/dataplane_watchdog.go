@@ -124,13 +124,7 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context, metadata *core_xd
 	}
 
 	certInfo := d.EnvoyCpCtx.Secrets.Info(mesh_proto.DataplaneProxyType, d.key)
-	// 原证书要到 07:55:54 才过期，所以如果保留了原来的证书，就不会需要重新生成证书？
-	// 如果为 Nil 也不会重新生成证书？（但是，如果从非 nil 变成 nil 呢？如何检测他从非 nil 变成 nil? ）
 
-	// 为什么 在 2025-02-09T02:59:31.898Z 的推送会有 565c5411-1595-4b1f-911e-ab75cf750d03 呢？就是说，secret 变成 nil 之后，我们并没有清空 snapshot 中的 secret 资源！
-	// 但为什么重新生成证书之后，还是没有重新生成 snapshot 呢？
-
-	// 02:59:46 重新生成了证书，所以没有要过期的问题
 	syncForCert := certInfo != nil && certInfo.ExpiringSoon() // check if we need to regenerate config because identity cert is expiring soon.
 	syncForConfig := meshCtx.Hash != d.lastHash               // check if we need to regenerate config because Kuma policies has changed.
 	result := SyncResult{
