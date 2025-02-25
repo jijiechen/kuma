@@ -56,10 +56,10 @@ jobs:
           gh --version
           PR_INFO_JSON=$(gh pr view ${{ inputs.pr_number }} --json 'number,title,mergedAt,state,mergeCommit,baseRefName' || echo '{}')
           
-          TITLE=$(echo -n "$PR_JSON" | jq -r '.title //empty')
-          STATE=$(echo -n "$PR_JSON" | jq -r '.state //empty')
-          BASE_REF=$(echo -n "$PR_JSON" | jq -r '.baseRefName //empty')
-          COMMIT=$(echo -n "$PR_JSON" | jq -r '.mergeCommit.oid //empty')
+          TITLE=$(echo -n "$PR_INFO_JSON" | jq -r '.title //empty')
+          STATE=$(echo -n "$PR_INFO_JSON" | jq -r '.state //empty')
+          BASE_REF=$(echo -n "$PR_INFO_JSON" | jq -r '.baseRefName //empty')
+          COMMIT=$(echo -n "$PR_INFO_JSON" | jq -r '.mergeCommit.oid //empty')
           
           echo "pr_title=${TITLE}" >> $GITHUB_OUTPUT
           echo "pr_state=${STATE}" >> $GITHUB_OUTPUT
