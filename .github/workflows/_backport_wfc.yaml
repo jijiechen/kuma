@@ -113,6 +113,7 @@ jobs:
       PR_TITLE: ${{ needs.collect-info.outputs.pr_title }}
       SHA: ${{ needs.collect-info.outputs.pr_merge_commit_sha }}
       TARGET_BRANCH: ${{ matrix.branch }}
+      USE_APP_TOKEN: ${{ secrets.app_id != '' }}
     steps:
       - uses: marocchino/sticky-pull-request-comment@efaaab3fd41a9c3de579aba759d2552635e590fd # v2.8.0
         with:
@@ -120,12 +121,12 @@ jobs:
           message: backporting to ${{ matrix.branch }} with [action](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
       - id: github-app-token
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        if: ${{ secrets.app_id != '' }}
+        if: ${{ env.USE_APP_TOKEN == 'true' }}
         with:
           app_id: ${{ secrets.app_id }}
           private_key: ${{ secrets.private_key }}
       - id: github-context-token
-        if: ${{ secrets.app_id == '' }}
+        if: ${{ env.USE_APP_TOKEN != 'true' }}
         run: |
           echo "token=${{ github.token }}" >> $GITHUB_OUTPUT
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
