@@ -12,11 +12,6 @@ on:
         type: string
         default: ""
         required: false
-    secrets:
-      app_id:
-        required: true
-      private_key:
-        required: true
 jobs:
   maybe-backport:
     uses: ./.github/workflows/_backport_wfc.yaml
