@@ -1,0 +1,28 @@
+
+on:
+  workflow_dispatch:
+    inputs:
+      PR:
+        description: "number of the PR to be backported"
+        type: string
+        default: ""
+        required: true
+      branches:
+        description: "target branches for backport (leave empty to target all active branches that applies)"
+        type: string
+        default: ""
+        required: false
+    secrets:
+      app_id:
+        required: true
+      private_key:
+        required: true
+jobs:
+  maybe-backport:
+    uses: ./.github/workflows/_backport_wfc.yaml
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+        pr_number: ${{ inputs.PR }}
+        target_branches: ${{ inputs.branches }}
