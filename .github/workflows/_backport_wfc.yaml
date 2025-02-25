@@ -49,6 +49,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_DEBUG: ${{ runner.debug == '1' }}
         run: |
+          if [[ "${{ runner.debug }} == "1" ]]; then
+            set -x
+          fi
+
           gh --version
           PR_INFO_JSON=$(gh pr view ${{ inputs.pr_number }} --json 'number,title,mergedAt,state,mergeCommit,baseRefName' || echo '{}')
           
@@ -73,6 +77,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_DEBUG: ${{ runner.debug == '1' }}
         run: |
+          if [[ "${{ runner.debug }} == "1" ]]; then
+            set -x
+          fi
+          
           # target_branches
           if [[ "${{ inputs.target_branches }}" != "" ]]; then
             TARGET_BRANCHES=$(echo "[\"${{ inputs.target_branches }}\"]" | sed 's/ //g' | sed 's/,/","/g')
