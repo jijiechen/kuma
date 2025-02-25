@@ -1,6 +1,16 @@
 on:
   workflow_call:
     inputs:
+      pr_number:
+        description: "number of the PR to be backported"
+        type: string
+        default: ""
+        required: true
+      target_branches:
+        description: "target branches for backport"
+        type: string
+        default: ""
+        required: false
       label:
         description: "The label to use to indicate backport"
         type: string
@@ -28,51 +38,74 @@ on:
         required: true
 
 jobs:
-  build-matrix:
-    if: (github.event.action == 'closed' || github.event.action == 'labeled' ) && github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, inputs.label)
+  collect-info:
     outputs:
+      pr_title: ${{ steps.get-pr-info.outputs.pr_title }}
+      pr_state: ${{ steps.get-pr-info.outputs.pr_state }}
+      pr_base_ref: ${{ steps.get-pr-info.outputs.pr_base_ref }}
+      pr_merge_commit_sha: ${{ steps.get-pr-info.outputs.pr_merge_commit_sha }}
       branches: ${{ steps.generate-matrix.outputs.branches }}
     runs-on: ubuntu-latest
     steps:
-      - id: generate-matrix
-        name: generate-matrix
+      - id: get-pr-info
+        name: Get PR info
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The head -1 is because GITHUB_OUTPUT is easier to work with single line output and this file is created with automation in `lifecycle.yaml`
-          TARGET_BRANCHES=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.branchFilePath }} --jq '.content | @base64d' | jq  -cM '.[:index("${{ github.event.pull_request.base.ref }}")]')
-          echo "branches=${TARGET_BRANCHES}" >> $GITHUB_OUTPUT
+          PR_INFO_JSON=$(gh pr view ${{ inputs.pr_number }} --json 'number,title,mergedAt,state,mergeCommit,baseRefName' || echo '{}')
+          
+          TITLE=$(echo -n "$PR_JSON" | jq -r '.title //empty')
+          STATE=$(echo -n "$PR_JSON" | jq -r '.state //empty')
+          BASE_REF=$(echo -n "$PR_JSON" | jq -r '.baseRefName //empty')
+          COMMIT=$(echo -n "$PR_JSON" | jq -r '.mergeCommit.oid //empty')
+          
+          echo "pr_title=${TITLE}" >> $GITHUB_OUTPUT
+          echo "pr_state=${STATE}" >> $GITHUB_OUTPUT
+          echo "pr_base_ref=${BASE_REF}" >> $GITHUB_OUTPUT
+          echo "pr_merge_commit_sha=${COMMIT}" >> $GITHUB_OUTPUT
+      - name: Ensure PR is merged
+        run: |
+          if [[ "${{ steps.get-pr-info.outputs.pr_state }}" != "MERGED" ]]; then
+            echo "PR ${{ inputs.pr_number }} is not merged, current state: '$PR_STATE'"
+            exit 1
+          fi
+      - id: generate-matrix
+        name: Generate target branch info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # target_branches
+          if [[ "${{ inputs.target_branches }}" != "" ]]; then
+            TARGET_BRANCHES=$(echo "[\"${{ inputs.target_branches }}\"]" | sed 's/ //g' | sed 's/,/","/g')
+            echo "branches=${TARGET_BRANCHES}" >> $GITHUB_OUTPUT
+          else
+            # The head -1 is because GITHUB_OUTPUT is easier to work with single line output
+            TARGET_BRANCHES=$(gh api /repos/${{ github.repository }}/contents/${{ inputs.branchFilePath }} --jq '.content | @base64d' | jq  -cM '.[:index("${{ steps.get-pr-info.outputs.pr_base_ref }}")]')
+            echo "branches=${TARGET_BRANCHES}" >> $GITHUB_OUTPUT
+          fi
   open-prs:
     permissions:
       contents: read  # for actions/checkout to fetch code
       pull-requests: write  # for marocchino/sticky-pull-request-comment to create or update PR comment
     needs:
-      - build-matrix
+      - collect-info
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJSON(needs.build-matrix.outputs.branches) }}
+        branch: ${{ fromJSON(needs.collect-info.outputs.branches) }}
     runs-on: ubuntu-latest
     env:
       GH_USER: ${{ inputs.gitUser }}
       GH_EMAIL: ${{ inputs.gitEmail }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_TITLE: ${{ github.event.pull_request.title }}
-      SHA: ${{ github.event.pull_request.merge_commit_sha }}
+      PR_NUMBER: ${{ inputs.pr_number }}
+      PR_TITLE: ${{ needs.collect-info.outputs.pr_title }}
+      SHA: ${{ needs.collect-info.outputs.pr_merge_commit_sha }}
       TARGET_BRANCH: ${{ matrix.branch }}
     steps:
       - uses: marocchino/sticky-pull-request-comment@efaaab3fd41a9c3de579aba759d2552635e590fd # v2.8.0
         with:
           append: true
           message: backporting to ${{ matrix.branch }} with [action](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-      - id: github-app-token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        with:
-          app_id: ${{ secrets.app_id }}
-          private_key: ${{ secrets.private_key }}
-      # uncomment to try without the github app
-      #        run: |
-      #          echo "token=${{ github.token }}" >> $GITHUB_OUTPUT
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.TARGET_BRANCH }}
@@ -116,6 +149,6 @@ jobs:
           delete-branch: true
           draft: false
           labels: ${{ env.LABELS }}
-          token: ${{ steps.github-app-token.outputs.token }}
+          token: ${{ github.token }}
           committer: ${{ env.GH_USER }} ${{ env.GH_EMAIL }}
           author: ${{ env.GH_USER }} ${{ env.GH_EMAIL }}
