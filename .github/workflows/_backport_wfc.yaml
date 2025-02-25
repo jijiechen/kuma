@@ -31,6 +31,11 @@ on:
         type: string
         default: "<110050114+kumahq[bot]@users.noreply.github.com>"
         required: false
+    secrets:
+      app_id:
+        required: false
+      private_key:
+        required: false
 env:
   GH_REPO: ${{ github.repository }}
 jobs:
@@ -91,7 +96,7 @@ jobs:
           fi
   open-prs:
     permissions:
-      contents: read  # for actions/checkout to fetch code
+      contents: ${{ secrets.app_id == '' && 'write' ||  'read' }}  # for actions/checkout to fetch code, if app_id is not set, we need to write
       pull-requests: write  # for marocchino/sticky-pull-request-comment to create or update PR comment
     needs:
       - collect-info
@@ -112,6 +117,16 @@ jobs:
         with:
           append: true
           message: backporting to ${{ matrix.branch }} with [action](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+      - id: github-app-token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        if: ${{ secrets.app_id != '' }}
+        with:
+          app_id: ${{ secrets.app_id }}
+          private_key: ${{ secrets.private_key }}
+      - id: github-context-token
+        if: ${{ secrets.app_id == '' }}
+        run: |
+          echo "token=${{ github.token }}" >> $GITHUB_OUTPUT
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.TARGET_BRANCH }}
@@ -159,6 +174,6 @@ jobs:
           delete-branch: true
           draft: ${{ contains(env.LABELS, 'conflict') }}
           labels: ${{ env.LABELS }}
-          token: ${{ github.token }}
+          token: ${{ secrets.app_id != '' && steps.github-app-token.outputs.token || steps.github-context-token.outputs.token }}
           committer: ${{ env.GH_USER }} ${{ env.GH_EMAIL }}
           author: ${{ env.GH_USER }} ${{ env.GH_EMAIL }}
