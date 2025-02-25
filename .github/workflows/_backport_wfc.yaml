@@ -31,6 +31,8 @@ on:
         type: string
         default: "<110050114+kumahq[bot]@users.noreply.github.com>"
         required: false
+env:
+  GH_REPO: ${{ github.repository }}
 jobs:
   collect-info:
     outputs:
@@ -40,14 +42,12 @@ jobs:
       pr_merge_commit_sha: ${{ steps.get-pr-info.outputs.pr_merge_commit_sha }}
       branches: ${{ steps.generate-matrix.outputs.branches }}
     runs-on: ubuntu-latest
-    env:
-      GH_REPO: ${{ github.repository }}
-      GH_DEBUG: ${{ runner.debug == '1' }}
     steps:
       - id: get-pr-info
         name: Get PR info
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_DEBUG: ${{ runner.debug == '1' }}
         run: |
           gh --version
           PR_INFO_JSON=$(gh pr view ${{ inputs.pr_number }} --json 'number,title,mergedAt,state,mergeCommit,baseRefName' || echo '{}')
@@ -71,6 +71,7 @@ jobs:
         name: Generate target branch info
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_DEBUG: ${{ runner.debug == '1' }}
         run: |
           # target_branches
           if [[ "${{ inputs.target_branches }}" != "" ]]; then
@@ -93,8 +94,6 @@ jobs:
         branch: ${{ fromJSON(needs.collect-info.outputs.branches) }}
     runs-on: ubuntu-latest
     env:
-      GH_REPO: ${{ github.repository }}
-      GH_DEBUG: ${{ runner.debug == '1' }}
       GH_USER: ${{ inputs.gitUser }}
       GH_EMAIL: ${{ inputs.gitEmail }}
       PR_NUMBER: ${{ inputs.pr_number }}

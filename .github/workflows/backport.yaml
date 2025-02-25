@@ -1,5 +1,5 @@
 name: backport
-run-name: "${{ format( 'backport #{0} to branches {1}', inputs.PR, ( inputs.branches && format( 'branches {0}', inputs.branches) || 'active branches' )) }}"
+run-name: "${{ format( 'backport #{0} to {1}', inputs.PR, ( inputs.branches && format( 'branches {0}', inputs.branches) || 'active branches' )) }}"
 on:
   workflow_dispatch:
     inputs:
