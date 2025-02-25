@@ -96,7 +96,8 @@ jobs:
           fi
   open-prs:
     permissions:
-      contents: ${{ secrets.app_id == '' && 'write' ||  'read' }}  # for actions/checkout to fetch code, if app_id is not set, we need to write
+      # contents: read  # for actions/checkout to fetch code, when use github-app-token with secrets set
+      contents: write  # when use context token without secrets set
       pull-requests: write  # for marocchino/sticky-pull-request-comment to create or update PR comment
     needs:
       - collect-info
