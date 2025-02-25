@@ -49,7 +49,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DEBUG=1 gh --version
+          gh --version
           PR_INFO_JSON=$(gh pr view ${{ inputs.pr_number }} --json 'number,title,mergedAt,state,mergeCommit,baseRefName' || echo '{}')
           
           TITLE=$(echo -n "$PR_JSON" | jq -r '.title //empty')
